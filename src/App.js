@@ -3,7 +3,7 @@ import axios from 'axios';
 import './App.css'; 
 
 const App = () => {
-  const [tickets, setTickets] = useState([]);
+  // REMOVED: const [tickets, setTickets] = useState([]); <-- This caused the error
   const [upcoming, setUpcoming] = useState([]);
   const [past, setPast] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -15,27 +15,21 @@ const App = () => {
     const fetchTickets = async () => {
       try {
         const response = await axios.get(`${API_BASE_URL}/api/tickets`);
-        setTickets(response.data);
+        // We don't need setTickets(response.data) anymore.
         
-        // 1. GET "TODAY" AS A SIMPLE STRING (YYYY-MM-DD)
-        // We use 'en-CA' because Canada uses the YYYY-MM-DD format by default.
-        // This gets the date in YOUR local timezone, not UTC.
+        // 1. GET "TODAY" AS A STRING (YYYY-MM-DD) in your local time
         const todayString = new Date().toLocaleDateString('en-CA');
 
         const upcomingList = [];
         const pastList = [];
 
         response.data.forEach(ticket => {
-          // Safety check: if no date, put in upcoming (or wherever you prefer)
           if (!ticket.due_date) {
             upcomingList.push(ticket); 
             return;
           }
 
-          // 2. STRING COMPARISON (Simple & Bug-proof)
-          // "2023-10-27" >= "2023-10-27" is TRUE.
-          // "2023-10-28" >= "2023-10-27" is TRUE.
-          // "2023-10-26" >= "2023-10-27" is FALSE.
+          // 2. STRING COMPARISON
           if (ticket.due_date >= todayString) {
             upcomingList.push(ticket);
           } else {
