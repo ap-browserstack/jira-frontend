@@ -10,7 +10,6 @@ function App() {
   const [filterAssignee, setFilterAssignee] = useState('All');
   const [filterTime, setFilterTime] = useState('All');
 
-  // Use Env var for Vercel, localhost for dev
   const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
   useEffect(() => {
@@ -29,30 +28,42 @@ function App() {
 
   const getDateColorClass = (dateString) => {
     if (!dateString || dateString === 'No Date') return 'neutral';
+    
+    // 1. Get "Today" at Local Midnight
     const today = new Date();
     today.setHours(0, 0, 0, 0); 
-    const due = new Date(dateString);
-    due.setHours(0, 0, 0, 0);
+    
+    // 2. Parse Due Date as Local Midnight (Fixes the timezone bug)
+    const [year, month, day] = dateString.split('-').map(Number);
+    const due = new Date(year, month - 1, day);
+
+    // 3. Calculate Difference
     const diffTime = due - today;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    if (diffDays <= 0) return 'red';
-    if (diffDays <= 3) return 'yellow';
-    return 'green';
+
+    // 4. Logic Fix: "Today" (0) should NOT be red.
+    if (diffDays < 0) return 'red';      // Strictly Past
+    if (diffDays <= 3) return 'yellow';  // Today + Next 3 Days
+    return 'green';                      // Future
   };
 
   const filteredTickets = tickets.filter(ticket => {
     const matchesAssignee = filterAssignee === 'All' || ticket.assignee === filterAssignee;
     let matchesTime = true;
     const color = getDateColorClass(ticket.due_date);
+    
+    // Since "Today" is now Yellow, it will NOT match 'red', so it goes to Upcoming.
     if (filterTime === 'Previous') matchesTime = color === 'red'; 
     else if (filterTime === 'Upcoming') matchesTime = color !== 'red';
+    
     return matchesAssignee && matchesTime;
   });
 
   const sortedTickets = [...filteredTickets].sort((a, b) => {
     if (a.due_date === 'No Date') return 1;
     if (b.due_date === 'No Date') return -1;
-    return new Date(a.due_date) - new Date(b.due_date);
+    // Simple string comparison is safer for sorting YYYY-MM-DD
+    return a.due_date.localeCompare(b.due_date);
   });
 
   const uniqueAssignees = ['All', ...new Set(tickets.map(t => t.assignee))];
@@ -118,4 +129,3 @@ function App() {
 }
 
 export default App;
-
