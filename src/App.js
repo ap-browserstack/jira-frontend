@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import './App.css'; // Make sure you have some basic CSS or remove this line
+import './App.css'; 
 
 const App = () => {
   const [tickets, setTickets] = useState([]);
@@ -9,36 +9,34 @@ const App = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // 1. DETERMINE API URL (Handles Localhost vs Vercel automatically)
   const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
   useEffect(() => {
     const fetchTickets = async () => {
       try {
-        // Fetch data from your backend
         const response = await axios.get(`${API_BASE_URL}/api/tickets`);
         setTickets(response.data);
         
-        // 2. SEPARATE TICKETS INTO 'UPCOMING' AND 'PAST'
-        const today = new Date();
-        today.setHours(0, 0, 0, 0); // Reset "Now" to Midnight this morning
+        // 1. GET "TODAY" AS A SIMPLE STRING (YYYY-MM-DD)
+        // We use 'en-CA' because Canada uses the YYYY-MM-DD format by default.
+        // This gets the date in YOUR local timezone, not UTC.
+        const todayString = new Date().toLocaleDateString('en-CA');
 
         const upcomingList = [];
         const pastList = [];
 
         response.data.forEach(ticket => {
-          if (!ticket.due_date || ticket.due_date === 'No Date') {
-            // Decide where to put tickets with no date (optional)
+          // Safety check: if no date, put in upcoming (or wherever you prefer)
+          if (!ticket.due_date) {
             upcomingList.push(ticket); 
             return;
           }
 
-          // 3. ROBUST DATE PARSING (Fixes the "Today" bug)
-          // We split "YYYY-MM-DD" manually to ensure it's treated as Local Time, not UTC.
-          const [year, month, day] = ticket.due_date.split('-').map(Number);
-          const ticketDate = new Date(year, month - 1, day); // Month is 0-indexed in JS
-
-          if (ticketDate >= today) {
+          // 2. STRING COMPARISON (Simple & Bug-proof)
+          // "2023-10-27" >= "2023-10-27" is TRUE.
+          // "2023-10-28" >= "2023-10-27" is TRUE.
+          // "2023-10-26" >= "2023-10-27" is FALSE.
+          if (ticket.due_date >= todayString) {
             upcomingList.push(ticket);
           } else {
             pastList.push(ticket);
@@ -59,7 +57,6 @@ const App = () => {
     fetchTickets();
   }, [API_BASE_URL]);
 
-  // 4. HELPER TO RENDER A LIST OF TICKETS
   const renderTicketList = (list) => (
     <div className="ticket-grid">
       {list.length === 0 ? <p>No tickets found.</p> : list.map(ticket => (
@@ -71,7 +68,7 @@ const App = () => {
             : {ticket.title}
           </h3>
           <div className="ticket-info">
-            <span className={`status ${ticket.status.toLowerCase().replace(" ", "-")}`}>
+            <span className={`status ${ticket.status ? ticket.status.toLowerCase().replace(" ", "-") : 'unknown'}`}>
               {ticket.status}
             </span>
             <span className="assignee">👤 {ticket.assignee}</span>
@@ -102,7 +99,7 @@ const App = () => {
           <hr />
 
           <section className="section past">
-            <h2>⚠️ Past Due / Overdue ({past.length})</h2>
+            <h2>⚠️ Past Due ({past.length})</h2>
             {renderTicketList(past)}
           </section>
 
