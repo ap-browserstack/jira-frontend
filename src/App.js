@@ -26,35 +26,48 @@ function App() {
     fetchTickets();
   }, [API_BASE_URL]);
 
-  const getDateColorClass = (dateString) => {
-    if (!dateString || dateString === 'No Date') return 'neutral';
+  // --- HELPER: CALCULATE DAYS REMAINING ---
+  // We use this single source of truth for both Color and Filtering
+  const getDaysRemaining = (dateString) => {
+    if (!dateString || dateString === 'No Date') return 999; // Treat No Date as far future
     
-    // 1. Get "Today" at Local Midnight
     const today = new Date();
     today.setHours(0, 0, 0, 0); 
     
-    // 2. Parse Due Date as Local Midnight (Fixes the timezone bug)
     const [year, month, day] = dateString.split('-').map(Number);
     const due = new Date(year, month - 1, day);
 
-    // 3. Calculate Difference
     const diffTime = due - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    // 4. Logic Fix: "Today" (0) should NOT be red.
-    if (diffDays < 0) return 'red';      // Strictly Past
-    if (diffDays <= 3) return 'yellow';  // Today + Next 3 Days
-    return 'green';                      // Future
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
+  // --- LOGIC 1: COLOR (VISUAL) ---
+  const getDateColorClass = (dateString) => {
+    const diffDays = getDaysRemaining(dateString);
+
+    if (dateString === 'No Date') return 'neutral';
+
+    // VISUAL RULE: Today (0) and Past (<0) are RED
+    if (diffDays <= 0) return 'red';      
+    if (diffDays <= 3) return 'yellow';  
+    return 'green';                      
+  };
+
+  // --- LOGIC 2: FILTERING (LOCATION) ---
   const filteredTickets = tickets.filter(ticket => {
     const matchesAssignee = filterAssignee === 'All' || ticket.assignee === filterAssignee;
     let matchesTime = true;
-    const color = getDateColorClass(ticket.due_date);
     
-    // Since "Today" is now Yellow, it will NOT match 'red', so it goes to Upcoming.
-    if (filterTime === 'Previous') matchesTime = color === 'red'; 
-    else if (filterTime === 'Upcoming') matchesTime = color !== 'red';
+    const diffDays = getDaysRemaining(ticket.due_date);
+    
+    if (filterTime === 'Previous') {
+      // "Previous" means STRICTLY Past (Yesterday or older)
+      matchesTime = diffDays < 0; 
+    } 
+    else if (filterTime === 'Upcoming') {
+      // "Upcoming" means Today (0) or Future (>0)
+      matchesTime = diffDays >= 0; 
+    }
     
     return matchesAssignee && matchesTime;
   });
@@ -62,7 +75,6 @@ function App() {
   const sortedTickets = [...filteredTickets].sort((a, b) => {
     if (a.due_date === 'No Date') return 1;
     if (b.due_date === 'No Date') return -1;
-    // Simple string comparison is safer for sorting YYYY-MM-DD
     return a.due_date.localeCompare(b.due_date);
   });
 
@@ -86,8 +98,8 @@ function App() {
             <label>Timeline</label>
             <select value={filterTime} onChange={e => setFilterTime(e.target.value)}>
               <option value="All">All Time</option>
-              <option value="Upcoming">📅 Upcoming</option>
-              <option value="Previous">⚠️ Overdue / Past</option>
+              <option value="Upcoming">📅 Today & Upcoming</option>
+              <option value="Previous">⚠️ Overdue</option>
             </select>
           </div>
         </div>
