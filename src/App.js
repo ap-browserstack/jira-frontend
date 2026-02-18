@@ -1,121 +1,115 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import './App.css';
+import './App.css'; // Make sure you have some basic CSS or remove this line
 
-function App() {
+const App = () => {
   const [tickets, setTickets] = useState([]);
+  const [upcoming, setUpcoming] = useState([]);
+  const [past, setPast] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
-  const [filterAssignee, setFilterAssignee] = useState('All');
-  const [filterTime, setFilterTime] = useState('All');
 
-  // Use Env var for Vercel, localhost for dev
+  // 1. DETERMINE API URL (Handles Localhost vs Vercel automatically)
   const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
   useEffect(() => {
     const fetchTickets = async () => {
       try {
+        // Fetch data from your backend
         const response = await axios.get(`${API_BASE_URL}/api/tickets`);
         setTickets(response.data);
+        
+        // 2. SEPARATE TICKETS INTO 'UPCOMING' AND 'PAST'
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // Reset "Now" to Midnight this morning
+
+        const upcomingList = [];
+        const pastList = [];
+
+        response.data.forEach(ticket => {
+          if (!ticket.due_date || ticket.due_date === 'No Date') {
+            // Decide where to put tickets with no date (optional)
+            upcomingList.push(ticket); 
+            return;
+          }
+
+          // 3. ROBUST DATE PARSING (Fixes the "Today" bug)
+          // We split "YYYY-MM-DD" manually to ensure it's treated as Local Time, not UTC.
+          const [year, month, day] = ticket.due_date.split('-').map(Number);
+          const ticketDate = new Date(year, month - 1, day); // Month is 0-indexed in JS
+
+          if (ticketDate >= today) {
+            upcomingList.push(ticket);
+          } else {
+            pastList.push(ticket);
+          }
+        });
+
+        setUpcoming(upcomingList);
+        setPast(pastList);
         setLoading(false);
+
       } catch (err) {
+        console.error("Error fetching tickets:", err);
         setError("Could not connect to Backend.");
         setLoading(false);
       }
     };
+
     fetchTickets();
   }, [API_BASE_URL]);
 
-  const getDateColorClass = (dateString) => {
-    if (!dateString || dateString === 'No Date') return 'neutral';
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); 
-    const due = new Date(dateString);
-    due.setHours(0, 0, 0, 0);
-    const diffTime = due - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    if (diffDays <= 0) return 'red';
-    if (diffDays <= 3) return 'yellow';
-    return 'green';
-  };
-
-  const filteredTickets = tickets.filter(ticket => {
-    const matchesAssignee = filterAssignee === 'All' || ticket.assignee === filterAssignee;
-    let matchesTime = true;
-    const color = getDateColorClass(ticket.due_date);
-    if (filterTime === 'Previous') matchesTime = color === 'red'; 
-    else if (filterTime === 'Upcoming') matchesTime = color !== 'red';
-    return matchesAssignee && matchesTime;
-  });
-
-  const sortedTickets = [...filteredTickets].sort((a, b) => {
-    if (a.due_date === 'No Date') return 1;
-    if (b.due_date === 'No Date') return -1;
-    return new Date(a.due_date) - new Date(b.due_date);
-  });
-
-  const uniqueAssignees = ['All', ...new Set(tickets.map(t => t.assignee))];
-
-  if (loading) return <div className="loading-screen"><div className="spinner"></div>Loading Mission Control...</div>;
-  if (error) return <div className="error-screen">⚠️ {error}</div>;
-
-  return (
-    <div className="app-container">
-      <nav className="top-nav">
-        <div className="brand"><span className="brand-icon">⚡</span><h1>Jira Radar</h1></div>
-        <div className="controls">
-          <div className="filter-wrapper">
-            <label>Assignee</label>
-            <select value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)}>
-              {uniqueAssignees.map(user => <option key={user} value={user}>{user}</option>)}
-            </select>
-          </div>
-          <div className="filter-wrapper">
-            <label>Timeline</label>
-            <select value={filterTime} onChange={e => setFilterTime(e.target.value)}>
-              <option value="All">All Time</option>
-              <option value="Upcoming">📅 Upcoming</option>
-              <option value="Previous">⚠️ Overdue / Past</option>
-            </select>
+  // 4. HELPER TO RENDER A LIST OF TICKETS
+  const renderTicketList = (list) => (
+    <div className="ticket-grid">
+      {list.length === 0 ? <p>No tickets found.</p> : list.map(ticket => (
+        <div key={ticket.id} className="ticket-card">
+          <h3>
+            <a href={ticket.link} target="_blank" rel="noopener noreferrer">
+              {ticket.key}
+            </a>
+            : {ticket.title}
+          </h3>
+          <div className="ticket-info">
+            <span className={`status ${ticket.status.toLowerCase().replace(" ", "-")}`}>
+              {ticket.status}
+            </span>
+            <span className="assignee">👤 {ticket.assignee}</span>
+            <span className="date">📅 {ticket.due_date}</span>
           </div>
         </div>
-      </nav>
-      <main className="board-content">
-        <div className="board-header">
-          <h2>Active Issues</h2>
-          <span className="count-badge">{sortedTickets.length} issues found</span>
-        </div>
-        <div className="card-grid">
-          {sortedTickets.map(ticket => {
-             const colorClass = getDateColorClass(ticket.due_date);
-             return (
-              <a key={ticket.id} href={ticket.link} target="_blank" rel="noopener noreferrer" className="ticket-card-link">
-                <div className="ticket-card">
-                  <div className="card-top">
-                    <span className="ticket-id">{ticket.key}</span>
-                    <span className={`status-pill ${ticket.status.replace(/[\s/]+/g, '-').toLowerCase()}`}>{ticket.status}</span>
-                  </div>
-                  <h3 className="ticket-subject">{ticket.title}</h3>
-                  <div className="card-meta">
-                    <div className="assignee-tag">
-                      <div className="avatar">{ticket.assignee.charAt(0)}</div>
-                      <span className="name">{ticket.assignee.split(' ')[0]}</span>
-                    </div>
-                    <div className={`date-tag ${colorClass}`}>
-                      {ticket.due_date === 'No Date' ? 'No Due Date' : `📅 ${ticket.due_date}`}
-                    </div>
-                  </div>
-                </div>
-              </a>
-            );
-          })}
-        </div>
-        {sortedTickets.length === 0 && <div className="empty-state"><h3>All Clear! 🎉</h3><p>No tickets match your current filters.</p></div>}
-      </main>
+      ))}
     </div>
   );
-}
+
+  return (
+    <div className="App">
+      <header className="app-header">
+        <h1>🚀 Jira Dashboard</h1>
+      </header>
+
+      {loading && <div className="loading">Loading tickets...</div>}
+      {error && <div className="error">{error}</div>}
+
+      {!loading && !error && (
+        <div className="dashboard-container">
+          
+          <section className="section upcoming">
+            <h2>📅 Upcoming & Due Today ({upcoming.length})</h2>
+            {renderTicketList(upcoming)}
+          </section>
+
+          <hr />
+
+          <section className="section past">
+            <h2>⚠️ Past Due / Overdue ({past.length})</h2>
+            {renderTicketList(past)}
+          </section>
+
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default App;
-
